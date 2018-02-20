@@ -19,7 +19,7 @@ def main(path):
             sentences.extend(get_sentences(sep.join((path, p))))
     skipgrams = []
     for s in sentences:
-        skipgrams.extend(get_skipgrams(s[1], 2))
+        skipgrams.extend(get_skipgrams(s[1], 41))
     for i in range(19):
         print(skipgrams[i])
 
