@@ -11,14 +11,16 @@ import torch.nn.functional as F
 from gensim.models import Doc2Vec, doc2vec
 import pdb
 
+input_size, hidden_size, training_data_size, output_size = 100, 100, 0.8, 6
+
 def label_as_one_hot(grade):
-  vector = torch.Tensor(6).zero_()
+  vector = torch.Tensor(output_size).zero_()
   vector[grade] = 1
   return vector
 
 def get_prediction(output):
   max_index = 0
-  for i in range(6):
+  for i in range(output_size):
     # they're Variables
     if output[i].data[0] > output[max_index].data[0]:
       max_index = i
@@ -30,7 +32,7 @@ def train(n_n, data, grade_freq):
   # let's train 100 times because it's a pretty number
   for t in range(100):
     # range(6) gives 0...5
-    for grade in range(6):
+    for grade in range(output_size):
       # frequency gives how many reviews with this grade there are
       frequency = grade_freq[grade]
       label = label_as_one_hot(grade)
@@ -45,7 +47,7 @@ def train(n_n, data, grade_freq):
           # backpropagate
           loss.backward()
           # in gradient descent the size of the "step" taken
-          # to the direction on of the opposite of the gradient for a parameter
+          # to the opposite direction of the gradient for a parameter
           step_size = 0.0001
           for param in n_n.parameters():
             # update parameters
@@ -58,7 +60,7 @@ def train(n_n, data, grade_freq):
 def test(n_n, data, grade_freq):
   success = 0
   total = 0
-  for grade in range(1, 6):
+  for grade in range(output_size):
     # frequency gives how many reviews with this grade there are
     frequency = grade_freq[grade]
     label = label_as_one_hot(grade)
@@ -68,6 +70,7 @@ def test(n_n, data, grade_freq):
         vector = data.docvecs[tag]
         pred_vector = n_n(Variable(torch.from_numpy(vector)))
         pred = get_prediction(pred_vector)
+        print(pred)
         if pred == grade:
           success += 1
         total += 1
@@ -75,7 +78,7 @@ def test(n_n, data, grade_freq):
         # if tag was not found in dictionary
         # traceback.print_exc()
         continue
-  print('success rate in testing %d', (success/total))
+  return success/total
 
 def prepare_data(training_data_size, input_size):
   document = []
@@ -97,8 +100,6 @@ def prepare_data(training_data_size, input_size):
           Doc2Vec(document[training_index+1:], size=input_size, window=8, min_count=3),
           grade_freq)
 
-input_size, hidden_size, training_data_size, output_size = 10, 10, 0.8, 6
-
 (train_data, test_data, grade_freq) = prepare_data(training_data_size, input_size)
 network = torch.nn.Sequential(
           # Linear applies linear transformation y=Ax+b
@@ -109,6 +110,8 @@ network = torch.nn.Sequential(
           # Use softmax last to achieve probabilities
           torch.nn.Softmax(),
       )
-print(grade_freq)
+print('starting training')
 train(network, train_data, grade_freq)
-test(network, train_data, grade_freq)
+print('starting testing')
+success_ratio = test(network, test_data, grade_freq)
+print('success ratio ' + success_ratio)
