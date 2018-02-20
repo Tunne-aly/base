@@ -30,7 +30,7 @@ def train(n_n, data, grade_freq):
   # mean(x_n-y_n)^2 as the loss function
   loss_function = torch.nn.MSELoss()
   loss = Variable(torch.Tensor([1]))
-  while loss.data[0] > 0.001:
+  for j in range(100):
     # range(6) gives 0...5
     for grade in range(output_size):
       # frequency gives how many reviews with this grade there are
@@ -72,7 +72,7 @@ def test(n_n, data, grade_freq):
         vector = data.docvecs[tag]
         pred_vector = n_n(Variable(torch.from_numpy(vector)))
         pred = get_prediction(pred_vector)
-        print('TESTING pred vector for ' + str(pred)+ ' in testing ' + str(pred_vector))
+        print('TESTING pred vector for ' + str(label) + ' in testing ' + str(pred_vector))
         print('')
         if pred == grade:
           success += 1
