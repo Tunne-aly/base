@@ -16,7 +16,7 @@ model = Word2Vec(sentences, min_count=2)
 print(model)
 print('size = the amount of nn layers used')
 
-# print the vocbulary
+# print the vocabulary
 print(list(model.wv.vocab))
 
 print('\n .........the interesting stuff........\n')
