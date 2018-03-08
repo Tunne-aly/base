@@ -17,6 +17,10 @@ from functools import reduce
 rgx = re.compile(r"\d")
 splitter = re.compile(r"[?!.]")
 
+EMBEDDINGS_PATH = "embeddins.bin"
+BLOCK_LENGTH = 20
+TEST_DATA_SIZE = 300
+
 class Entwork(nn.Module):
     def __init__(self):
         super(Entwork, self).__init__()
@@ -25,8 +29,9 @@ class Entwork(nn.Module):
         self.fc1 = nn.Linear(1024, 200)
         self.fc2 = nn.Linear(200, 200)
         self.fc3 = nn.Linear(200, 50)
-        self.fc4 = nn.Linear(50, 10)
-        self.fc5 = nn.Linear(10, 5)
+        self.fc4 = nn.Linear(50, 50)
+        self.fc5 = nn.Linear(50, 10)
+        self.fc6 = nn.Linear(10, 5)
 
     def forward(self, x):
         x = F.max_pool2d(F.relu(self.cv1(x)), (1, 6))
@@ -36,39 +41,19 @@ class Entwork(nn.Module):
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
         x = F.relu(self.fc4(x))
-        return F.softmax(self.fc5(x), dim=1)
+        x = F.relu(self.fc5(x))
+        return F.softmax(self.fc6(x), dim=1)
 
 
-def main(data_path=None, sentences=None, relearn=False, embeddings_path="embeddins.bin", block_length=20):
-    if not sentences:
-        print("Reading sentences from file...")
-        sentences = get_sentences(data_path)
-        print("Read {} sentences".format(len(sentences)))
-    if isfile(embeddings_path) and not relearn:
-        print("Retreiving embeddings from {}".format(embeddings_path))
-        embeddings = KeyedVectors.load_word2vec_format(embeddings_path, binary=True)
-    else:
-        print("Calculating new embeddings...")
-        model = Word2Vec([t[1] for t in sentences], size=300, window=10, workers=2)
-        print("Done")
-        embeddings = model.wv
-        del model
-        embeddings.save_word2vec_format(embeddings_path, binary=True)
-        print("Embeddings stored to {}".format(embeddings_path))
-    print("Building sentece tensors...")
-    shuffle(sentences)
-    test_data_loader = DataLoader(
-        [(int(s[0]) - 1, get_sentence_tensor(s[1], embeddings, block_length)) for s in sentences[:300]],
-        batch_size=100, shuffle=False)
-    train_data_loader = DataLoader(
-        [(int(s[0]) - 1, get_sentence_tensor(s[1], embeddings, block_length)) for s in sentences[300:]],
-        batch_size=256, shuffle=True)
-    del sentences
+def main(data_path=None, sentences=None, relearn=False, embeddings_path=EMBEDDINGS_PATH, block_length=BLOCK_LENGTH, test_data_size=TEST_DATA_SIZE):
+    test_data, train_data = get_data_as_sentence_tensors(data_path, sentences, relearn, embeddings_path, block_length, test_data_size)
+    test_data_loader = DataLoader(test_data, batch_size=100, shuffle=False)
+    train_data_loader = DataLoader(train_data, batch_size=256, shuffle=True)
     ent = Entwork()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(ent.parameters(), lr=0.001)
     print("Training...")
-    for epoch in range(100):
+    for epoch in range(60):
         success = 0
         total = 0
         for i, data in enumerate(train_data_loader):
@@ -93,7 +78,40 @@ def main(data_path=None, sentences=None, relearn=False, embeddings_path="embeddi
             if labels[i] == preds[i]:
                 c += 1
             print("Actual: {}, predicted: {}".format(labels[i], preds[i]))
-    print("Accuracy: {}".format(c / 300))
+    print("Accuracy: {}".format(c / test_data_size))
+
+def get_data_as_sentence_tensors(data_path=None, sentences=None, relearn=False, embeddings_path=EMBEDDINGS_PATH, block_length=BLOCK_LENGTH, test_data_size=TEST_DATA_SIZE):
+    if not sentences:
+        print("Reading sentences from file...")
+        sentences = get_sentences(data_path)
+        print("Read {} sentences".format(len(sentences)))
+    if isfile(embeddings_path) and not relearn:
+        print("Retreiving embeddings from {}".format(embeddings_path))
+        embeddings = KeyedVectors.load_word2vec_format(embeddings_path, binary=True)
+    else:
+        print("Calculating new embeddings...")
+        model = Word2Vec([t[1] for t in sentences], size=300, window=10, workers=2)
+        print("Done")
+        embeddings = model.wv
+        del model
+        embeddings.save_word2vec_format(embeddings_path, binary=True)
+        print("Embeddings stored to {}".format(embeddings_path))
+    print("Building sentece tensors...")
+    data_freqs = dict([(1,0), (2,0), (3,0), (4,0), (5,0)])
+    cleaned_sentences = []
+    for sentence in sentences:
+        grade = int(sentence[0])
+        if data_freqs[grade] == 10000:
+            continue
+        cleaned_sentences.append((sentence[0], sentence[1]))
+        data_freqs[grade] += 1
+    print(data_freqs)
+    shuffle(cleaned_sentences)
+    test_data = [(int(s[0]) - 1, get_sentence_tensor(s[1], embeddings, block_length)) for s in cleaned_sentences[:test_data_size]]
+    train_data = [(int(s[0]) - 1, get_sentence_tensor(s[1], embeddings, block_length)) for s in cleaned_sentences[test_data_size:]]
+    del cleaned_sentences, sentences
+    return test_data, train_data
+
 
 
 def get_sentence_tensor(sentence, embeddings, block_length):
@@ -153,4 +171,4 @@ if __name__ == "__main__":
         start_time = time.time()
         main(sys.argv[1])
         passed_time = time.time() - start_time
-        print('procedure took {} hours'.format(str(passed_time / 60) / 60 ))
+        print('procedure took {} minutes'.format(str(passed_time / 60)))
