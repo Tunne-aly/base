@@ -45,8 +45,8 @@ class Entwork(nn.Module):
         return F.softmax(self.fc6(x), dim=1)
 
 
-def main(data_path=None, sentences=None, relearn=False, embeddings_path=EMBEDDINGS_PATH, block_length=BLOCK_LENGTH, test_data_size=TEST_DATA_SIZE):
-    test_data, train_data = get_data_as_sentence_tensors(data_path, sentences, relearn, embeddings_path, block_length, test_data_size)
+def main(data_path=None, sentences=None, relearn=False, embeddings_path=EMBEDDINGS_PATH, block_length=BLOCK_LENGTH, test_data_size=TEST_DATA_SIZE, normalize=True):
+    test_data, train_data = get_data_as_sentence_tensors(data_path, sentences, relearn, embeddings_path, block_length, test_data_size, normalize)
     test_data_loader = DataLoader(test_data, batch_size=100, shuffle=False)
     train_data_loader = DataLoader(train_data, batch_size=256, shuffle=True)
     ent = Entwork()
@@ -80,7 +80,7 @@ def main(data_path=None, sentences=None, relearn=False, embeddings_path=EMBEDDIN
             print("Actual: {}, predicted: {}".format(labels[i], preds[i]))
     print("Accuracy: {}".format(c / test_data_size))
 
-def get_data_as_sentence_tensors(data_path=None, sentences=None, relearn=False, embeddings_path=EMBEDDINGS_PATH, block_length=BLOCK_LENGTH, test_data_size=TEST_DATA_SIZE):
+def get_data_as_sentence_tensors(data_path=None, sentences=None, relearn=False, embeddings_path=EMBEDDINGS_PATH, block_length=BLOCK_LENGTH, test_data_size=TEST_DATA_SIZE, normalize=False):
     if not sentences:
         print("Reading sentences from file...")
         sentences = get_sentences(data_path)
@@ -101,8 +101,6 @@ def get_data_as_sentence_tensors(data_path=None, sentences=None, relearn=False, 
     cleaned_sentences = []
     for sentence in sentences:
         grade = int(sentence[0])
-        if data_freqs[grade] == 10000:
-            continue
         cleaned_sentences.append((sentence[0], sentence[1]))
         data_freqs[grade] += 1
     print(data_freqs)
