@@ -6,43 +6,73 @@ from gensim.models import Word2Vec, KeyedVectors
 import matplotlib.pyplot as plt
 import pandas as pd
 import nn
+import csv
 from functools import reduce
+from random import shuffle
+import torch
+from os import listdir, sep
 
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from sklearn.datasets.samples_generator import make_blobs
 
-def plot_sentences(data_path):
-    data = []
-    labels = []
-    _, train_data_loader = nn.get_data_as_sentence_tensors(data_path)
-    print('plotting training data')
-    for datum in train_data_loader:
-        sentence_token = datum[1].view(-1, reduce(lambda z, y: z * y, datum[1].size()[1:], 1))
-        token = sentence_token[0].numpy()
-        labels.append(datum[0])
-        data.append(token)
+EMBEDDINGS_PATH = "embeddins.bin"
+BLOCK_LENGTH = 20
+TEST_DATA_SIZE = 300
 
-    # TSNE
-    tsne_model = TSNE(n_components=2, init='pca')
-    new_values = tsne_model.fit_transform(data)
+def get_sentence_tensor(sentence, embeddings, block_length):
+    return torch.stack([torch.stack([get_embedding(i, sentence, embeddings) for i in range(block_length)])])
 
-    x = []
-    y = []
-    for value in new_values:
-        x.append(value[0])
-        y.append(value[1])
 
-    label_colors = ['black', 'red', 'blue', 'green', 'lightgreen']
+def get_embedding(idx, sentence, embeddings):
+    return (torch.from_numpy(embeddings[sentence[idx]])
+            if len(sentence) > idx and sentence[idx] in embeddings
+            else torch.zeros(300))
 
-    plt.figure(figsize=(16, 16))
-    for i in range(len(x)):
-        plt.scatter(x[i],y[i], c=label_colors[labels[i]])
-        plt.annotate(labels[i],
-                     xy=(x[i], y[i]),
-                     xytext=(5, 2),
-                     textcoords='offset points')
-    plt.show()
+
+def get_sentences(data_path):
+    ls = []
+    for p in listdir(data_path):
+        if p.endswith(".csv"):
+            for sent in read_sentences("{}{}{}".format(data_path, sep, p)):
+                ls.append(sent)
+    return ls
+
+def read_sentences(file_path):
+    with open(file_path) as infile:
+        reader = csv.reader(infile)
+        for line in reader:
+          yield line[1], [re.sub("[^a-öA-Ö ']", '', w).strip().lower() for w in line]
+
+def get_data_as_sentence_tensors(data_path=None, sentences=None, relearn=False, embeddings_path=EMBEDDINGS_PATH, block_length=BLOCK_LENGTH, test_data_size=TEST_DATA_SIZE, normalize=False):
+    if not sentences:
+        print("Reading sentences from file...")
+        sentences = get_sentences(data_path)
+        print("Read {} sentences".format(len(sentences)))
+    if isfile(embeddings_path) and not relearn:
+        print("Retreiving embeddings from {}".format(embeddings_path))
+        embeddings = KeyedVectors.load_word2vec_format(embeddings_path, binary=True)
+    else:
+        print("Calculating new embeddings...")
+        model = Word2Vec([t[1] for t in sentences], size=300, window=10, workers=2)
+        print("Done")
+        embeddings = model.wv
+        del model
+        embeddings.save_word2vec_format(embeddings_path, binary=True)
+        print("Embeddings stored to {}".format(embeddings_path))
+    print("Building sentece tensors...")
+    data_freqs = dict([(1,0), (2,0), (3,0), (4,0), (5,0)])
+    cleaned_sentences = []
+    for sentence in sentences:
+        grade = int(sentence[0])
+        cleaned_sentences.append((sentence[0], sentence[1]))
+        data_freqs[grade] += 1
+    print(data_freqs)
+    shuffle(cleaned_sentences)
+    test_data = [(int(s[0]) - 1, get_sentence_tensor(s[1], embeddings, block_length)) for s in cleaned_sentences[:test_data_size]]
+    train_data = [(int(s[0]) - 1, get_sentence_tensor(s[1], embeddings, block_length)) for s in cleaned_sentences[test_data_size:]]
+    del cleaned_sentences, sentences
+    return test_data, train_data
 
 removable_words = ['ja', 'mutta', 'on', 'ole', 'oli', 'kun', 'kuin', 'myös']
 
